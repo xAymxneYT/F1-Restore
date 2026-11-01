@@ -1,0 +1,10 @@
+import org.objectweb.asm.*;import org.objectweb.asm.commons.*;import java.util.*;import java.util.zip.*;import java.nio.file.*;import java.io.*;
+public class RemapGen {
+ public static void main(String[]a)throws Exception{
+  Map<String,String>cs=new HashMap<>(),ms=new HashMap<>();Map<String,String>supers=new HashMap<>();Map<String,String[]>interfaces=new HashMap<>();
+  for(String l:Files.readAllLines(Paths.get("deps/calamus.tiny"))){String[]p=l.split("\t");if(p[0].equals("CLASS"))cs.put(p[1],p[2]);else if(p[0].equals("METHOD")||p[0].equals("FIELD"))ms.put(p[1]+" "+p[3]+" "+p[2],p[4]);}
+  ZipFile z=new ZipFile("deps/client.jar");Enumeration<? extends ZipEntry>es=z.entries();while(es.hasMoreElements()){ZipEntry e=es.nextElement();if(!e.getName().endsWith(".class"))continue;ClassReader cr=new ClassReader(z.getInputStream(e));supers.put(cr.getClassName(),cr.getSuperName());interfaces.put(cr.getClassName(),cr.getInterfaces());}
+  Remapper r=new Remapper(){public String map(String n){return cs.getOrDefault(n,n);}String find(String o,String n,String d){if(o==null)return null;String v=ms.get(o+" "+n+" "+d);if(v!=null)return v;v=find(supers.get(o),n,d);if(v!=null)return v;for(String i:interfaces.getOrDefault(o,new String[0])){v=find(i,n,d);if(v!=null)return v;}return null;}String member(String o,String n,String d){String v=find(o,n,d);return v==null?n:v;}public String mapMethodName(String o,String n,String d){return n.startsWith("<")?n:member(o,n,d);}public String mapFieldName(String o,String n,String d){return member(o,n,d);}};
+  try(ZipOutputStream out=new ZipOutputStream(new FileOutputStream("deps/minecraft-gen2.jar"))){es=z.entries();while(es.hasMoreElements()){ZipEntry e=es.nextElement();if(!e.getName().endsWith(".class"))continue;ClassReader cr=new ClassReader(z.getInputStream(e));ClassWriter cw=new ClassWriter(0);cr.accept(new ClassRemapper(cw,r),0);out.putNextEntry(new ZipEntry(r.map(cr.getClassName())+".class"));out.write(cw.toByteArray());out.closeEntry();}}z.close();System.out.println("Remapped actual Minecraft client to Gen2 for compilation.");
+ }
+}
